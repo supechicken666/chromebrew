@@ -17,7 +17,8 @@ require_relative 'lib/util'
 $LOAD_PATH.unshift "#{CREW_LIB_PATH}lib"
 
 DOC = <<DOCOPT
-Chromebrew - Package manager for Chrome OS http://skycocker.github.io/chromebrew/
+Chromebrew - Package manager for Chrome OS
+http://skycocker.github.io/chromebrew/
 
 Usage:
   crew build [options] [-k|--keep] <name> ...
@@ -30,7 +31,7 @@ Usage:
   crew postinstall [options] <name> ...
   crew reinstall [options] [-k|--keep] [-s|--build-from-source] [-S|--recursive-build] <name> ...
   crew remove [options] <name> ...
-  crew search [options] [<name> ...]
+  crew search [options] [-a|--all] [<name> ...]
   crew update [options]
   crew upgrade [options] [-k|--keep] [-s|--build-from-source] [<name> ...]
   crew whatprovides [options] <name> ...
@@ -38,6 +39,7 @@ Usage:
   -k --keep               Keep the `CREW_BREW_DIR` (#{CREW_BREW_DIR}) directory.
   -s --build-from-source  Build from source even if pre-compiled binary exists.
   -S --recursive-build    Build from source, including all dependencies, even if pre-compiled binaries exist.
+  -a --all                Show all search results (in the name or description).
   -V --version            Display the crew version.
   -c --color              Use colors even if standard out is not a tty.
   -d --no-color           Disable colors even if standard out is a tty.
@@ -137,14 +139,6 @@ def set_package (pkgName, pkgPath)
   @pkg.name = pkgName
 end
 
-def list_packages
-  Find.find (CREW_LIB_PATH + 'packages') do |filename|
-    if File.extname(filename) == '.rb'
-      print_package filename
-    end
-  end
-end
-
 def list_available
   Find.find (CREW_LIB_PATH + 'packages') do |filename|
     @notInstalled = true
@@ -217,20 +211,18 @@ def search (pkgName, silent = false)
   abort "Package #{pkgName} not found. :(".lightred unless silent
 end
 
-def regexp_search(pkgPat)
+def regexp_search(pkgPat, all = false)
   re = Regexp.new(pkgPat, true)
-  results = Dir["#{CREW_LIB_PATH}packages/*.rb"].sort \
+  results = Dir.glob("#{CREW_LIB_PATH}/packages/*.rb") \
     .select  { |f| File.basename(f, '.rb') =~ re } \
     .each    { |f| print_package(f, @opt_verbose) }
-  if results.empty?
-    Find.find ("#{CREW_LIB_PATH}packages/") do |packagePath|
-      if File.file? packagePath and File.extname(packagePath) == '.rb'
-        packageName = File.basename packagePath, '.rb'
-        set_package packageName, packagePath
-        if ( @pkg.description =~ /#{pkgPat}/i )
-          print_current_package @opt_verbose
-          results.push(packageName)
-        end
+  if results.empty? or all then
+    for packagePath in Dir.glob("#{CREW_LIB_PREFIX}/packages/*.rb") do
+      packageName = File.basename packagePath, '.rb'
+      set_package packageName, packagePath
+      if ( @pkg.description =~ /#{pkgPat}/i )
+        print_current_package @opt_verbose
+        results.push(packageName)
       end
     end
   end
@@ -288,15 +280,14 @@ def help (pkgName)
   when "search"
     puts "Look for package(s)."
     puts "Usage: crew search [-v|--verbose] [<pattern> ...]"
-    puts "If <pattern> is omitted, all packages will be returned."
-    puts "If the package color is " + "green".lightgreen + ", it means the package is installed."
-    puts "If the package color is " + "red".lightred + ", it means the architecture is not supported."
-    puts "The <pattern> string can also contain regular expressions."
+    puts "If the package color is #{'green'.lightgreen}, it means the package is installed."
+    puts "If the package color is #{'red'.lightred}, it means the architecture is not supported."
+    puts "This function support regular expressions."
     puts "If `-v` or `--verbose` is present, homepage and version will be displayed."
     puts "Examples:"
     puts "  crew search ^lib".lightblue + " will display all packages that start with `lib`."
     puts "  crew search audio".lightblue + " will display all packages with `audio` in the name."
-    puts "  crew search | grep -i audio".lightblue + " will display all packages with `audio` in the name or description."
+    puts "  crew search audio --all".lightblue + " will display all packages with `audio` in the name or description."
     puts "  crew search git -v".lightblue + " will display packages with `git` in the name along with homepage and version."
   when "update"
     puts "Update crew."
@@ -1054,9 +1045,7 @@ end
 
 def search_command (args)
   args["<name>"].each do |name|
-    regexp_search name
-  end.empty? and begin
-    list_packages
+    regexp_search name, args["--color"]
   end
 end
 
