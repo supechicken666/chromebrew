@@ -74,7 +74,7 @@ class Package
   end
   
   def self.is_external?
-    return @is_external?
+    return @is_external
   end
 
   # Function to perform patch operations prior to build from source.
