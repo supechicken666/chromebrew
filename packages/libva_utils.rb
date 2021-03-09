@@ -10,6 +10,10 @@ class Libva_utils < Package
   source_sha256 '33f06929faa395f55ec816432679219c56d70850bf465c848f0418e8a4f0352b'
 
   depends_on 'libva'
+  
+  def self.patch
+    system "find . -type f -exec sed -i 's,-fstack-protector,-flto=auto,g' {} +"
+  end
 
   def self.build
     system "env CFLAGS='-pipe -fstack-protector-strong -U_FORTIFY_SOURCE -flto=auto -fuse-ld=gold' \
