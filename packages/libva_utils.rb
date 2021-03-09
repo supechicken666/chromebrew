@@ -16,9 +16,9 @@ class Libva_utils < Package
   end
 
   def self.build
-    system "env CFLAGS='-pipe -fstack-protector-strong -U_FORTIFY_SOURCE -flto=auto -fuse-ld=gold' \
-      CXXFLAGS='-pipe -fstack-protector-strong -U_FORTIFY_SOURCE -flto=auto -fuse-ld=gold' \
-      LDFLAGS='-fstack-protector-strong -U_FORTIFY_SOURCE -flto=auto' \
+    system "env CFLAGS='-pipe -fno-stack-protector -U_FORTIFY_SOURCE -flto=auto -fuse-ld=gold' \
+      CXXFLAGS='-pipe -fno-stack-protector -U_FORTIFY_SOURCE -flto=auto -fuse-ld=gold' \
+      LDFLAGS='-fno-stack-protector -U_FORTIFY_SOURCE -flto=auto' \
       ./configure #{CREW_OPTIONS}"
     system 'make'
   end
