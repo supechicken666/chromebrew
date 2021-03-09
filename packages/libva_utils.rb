@@ -13,7 +13,7 @@ class Libva_utils < Package
   
   def self.patch
     system "find . -type f -exec sed -e 's,aclocal-1.15,aclocal,g' \
-            -e 's,-fstack-protector,-flto=auto,g' {} +"
+            -e 's,-fstack-protector,-flto=auto,g' -i {} +"
   end
 
   def self.build
