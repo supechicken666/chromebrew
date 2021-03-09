@@ -12,7 +12,8 @@ class Libva_utils < Package
   depends_on 'libva'
   
   def self.patch
-    system "find . -type f -exec sed -i 's,-fstack-protector,-flto=auto,g' {} +"
+    system "find . -type f -exec sed -e 's,aclocal-1.15,aclocal,g' \
+            -e 's,-fstack-protector,-flto=auto,g' {} +"
   end
 
   def self.build
