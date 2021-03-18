@@ -40,34 +40,14 @@ class Sommelier < Package
    when 'x86_64'
       PEER_CMD_PREFIX='/lib64/ld-linux-x86-64.so.2'
   end
-
-  def self.build
-    # There is no good way to checksum the googlesource tgz file, as they appear to be generated on the fly
-    # and checksums vary with each download.
-    system 'curl -L https://chromium.googlesource.com/chromiumos/platform2/+archive/f3b2e2b6a8327baa2e62ef61036658c258ab4a09.tar.gz | tar mzx --warning=no-timestamp'
-    Dir.chdir ("vm_tools/sommelier") do
-
-    ## Google's sommelier expects to find virtwl.h in their kernel source includes, but we may not have
-    ## set of kernel headers which match, so we just download virtwl.h and then patch the sommelier source
-    ## to look for the file locally.
-    ########################## Download virtwl.h from Chromium 5.4 kernel tree ###########################################
-    #url_virtwl = "https://chromium.googlesource.com/chromiumos/third_party/kernel/+/5d641a7b7b64664230d2fd2aa1e74dd792b8b7bf/include/uapi/linux/virtwl.h?format=TEXT"
-    #uri_virtwl = URI.parse url_virtwl
-    #filename_virtwl = 'virtwl.h_base64'
-    #sha256sum_virtwl = 'a8215f4946ccf30cbd61fcf2ecc4edfe6d05bffeee0bacadd910455274955446'
-
-    #puts "Downloading virtwl".yellow
-    #system('curl', '-s', '-C', '-', '--insecure', '-L', '-#', url_virtwl, '-o', filename_virtwl)
-    #abort 'Checksum mismatch. :/ Try again.'.lightred unless
-      #Digest::SHA256.hexdigest( File.read( filename_virtwl ) ) == sha256sum_virtwl
-    #puts "virtwl base64 downloaded".lightgreen
-    #FileUtils.mkdir_p 'build/linux'
-    #system 'base64 --decode virtwl.h_base64 > build/linux/virtwl.h'   
-
+  
+  def self.patch
     # Patch to avoid error with GCC > 9.x
     # ../sommelier.cc:3238:10: warning: ‘char* strncpy(char*, const char*, size_t)’ specified bound 108 equals destination size [-Wstringop-truncation]
     system "sed -i 's/sizeof(addr.sun_path))/sizeof(addr.sun_path) - 1)/' sommelier.cc"
-
+  end
+  
+  def self.build
     # lld is needed so libraries linked to system libraries (e.g. libgbm.so) can be linked against, since those are required for graphics acceleration.
 
     system "env CC=clang CXX=clang++ \
@@ -85,12 +65,12 @@ class Sommelier < Package
     system "ninja -C build"
     
     Dir.chdir ("build") do
-      system 'curl -L "https://chromium.googlesource.com/chromiumos/containers/sommelier/+/refs/heads/master/sommelierrc?format=TEXT" | base64 --decode > sommelierrc'
+      system 'curl -L# "https://chromium.googlesource.com/chromiumos/containers/sommelier/+/refs/heads/master/sommelierrc?format=TEXT" | base64 --decode > sommelierrc'
       
       system "cat <<'EOF'> .sommelier-default.env
 #!/bin/bash
 shopt -os allexport
-CLUTTER_BACKEND=wayland
+CLUTTER_BACKEND=x11
 DISPLAY=:0
 GDK_BACKEND=x11
 SCALE=1
@@ -147,32 +127,28 @@ source ~/.sommelier.env &>/dev/null
 set +a
 mkdir -p #{CREW_PREFIX}/var/{log,run}
 checksommelierwayland () {
-  [[ -f \"#{CREW_PREFIX}/var/run/sommelier-wayland.pid\" ]] || return 1
+  [ -e \"#{CREW_PREFIX}/var/run/sommelier-wayland.pid\" ] || return 1
   /sbin/ss --unix -a -p | grep \"\\b\$(cat #{CREW_PREFIX}/var/run/sommelier-wayland.pid)\" | grep wayland &>/dev/null
 }
 checksommelierxwayland () {
   xdpyinfo -display \$DISPLAY &>/dev/null
 }
-## As per https://www.reddit.com/r/chromeos/comments/8r5pvh/crouton_sommelier_openjdk_and_oracle_sql/e0pfknx/
-## One needs a second sommelier instance for wayland clients since at some point wl-drm was not implemented
-## in ChromeOS's wayland compositor.
-#if ! checksommelierwayland ; then
-#pkill -F #{CREW_PREFIX}/var/run/sommelier-wayland.pid &>/dev/null
-#rm \${XDG_RUNTIME_DIR}/wayland-1*
-#sommelier --parent --peer-cmd-prefix=\"#{CREW_PREFIX}#{PEER_CMD_PREFIX}\" --drm-device=/dev/dri/renderD128 --shm-driver=noop --data-driver=noop --display=wayland-0 --socket=wayland-1 --virtwl-device=/dev/null > #{CREW_PREFIX}/var/log/sommelier.log 2>&1 &
-#echo \$! >#{CREW_PREFIX}/var/run/sommelier-wayland.pid
-#fi
+# As per https://www.reddit.com/r/chromeos/comments/8r5pvh/crouton_sommelier_openjdk_and_oracle_sql/e0pfknx/
+# One needs a second sommelier instance for wayland clients since at some point wl-drm was not implemented
+# in ChromeOS's wayland compositor.
+if ! checksommelierwayland ; then
+  pkill -F #{CREW_PREFIX}/var/run/sommelier-wayland.pid &>/dev/null
+  sommelier --parent --peer-cmd-prefix=\"#{CREW_PREFIX}#{PEER_CMD_PREFIX}\" --drm-device=/dev/dri/renderD128 --shm-driver=noop --data-driver=noop --display=wayland-0 --socket=wayland-1 --virtwl-device=/dev/null > #{CREW_PREFIX}/var/log/sommelier.log 2>&1 &
+  echo $! >#{CREW_PREFIX}/var/run/sommelier-wayland.pid
+fi
+
 if ! checksommelierxwayland; then
-pkill -F #{CREW_PREFIX}/var/run/sommelier-xwayland.pid &>/dev/null
-#[[ ! -d /tmp/.X11-unix ]] && mkdir /tmp/.X11-unix
-#sudo chmod -R 1777 /tmp/.X11-unix
-#sudo chown root:root /tmp/.X11-unix
-DISPLAY=\"\${DISPLAY//:}\"
-DISPLAY=\"\${DISPLAY:0:2}\"
-#sudo rm /tmp/.X11-unix/X\"\${DISPLAY}\"
-sommelier -X --x-display=:\$DISPLAY  --scale=\$SCALE --glamor --drm-device=/dev/dri/renderD128 --virtwl-device=/dev/null --shm-driver=noop --data-driver=noop --display=wayland-0 --xwayland-path=/usr/local/bin/Xwayland --xwayland-gl-driver-path=#{CREW_LIB_PREFIX}/dri --peer-cmd-prefix=\"#{CREW_PREFIX}#{PEER_CMD_PREFIX}\" --no-exit-with-child /bin/sh -c \"touch ~/.Xauthority; xauth -f ~/.Xauthority add :$DISPLAY . $(xxd -l 16 -p /dev/urandom); . #{CREW_PREFIX}/etc/sommelierrc\" &>>#{CREW_PREFIX}/var/log/sommelier.log
-echo \$! >#{CREW_PREFIX}/var/run/sommelier-xwayland.pid
-xhost +si:localuser:root &>/dev/null
+  pkill -F #{CREW_PREFIX}/var/run/sommelier-xwayland.pid &>/dev/null
+  [[ ! -d /tmp/.X11-unix ]] && mkdir /tmp/.X11-unix
+  DISPLAY=\"\${DISPLAY//:}\"
+  DISPLAY=\"\${DISPLAY:0:2}\"
+  sommelier -X --x-display=:\$DISPLAY  --scale=\$SCALE --glamor --drm-device=/dev/dri/renderD128 --virtwl-device=/dev/null --shm-driver=noop --data-driver=noop --display=wayland-0 --xwayland-path=/usr/local/bin/Xwayland --xwayland-gl-driver-path=#{CREW_LIB_PREFIX}/dri --peer-cmd-prefix=\"#{CREW_PREFIX}#{PEER_CMD_PREFIX}\" --no-exit-with-child /bin/sh -c \"touch ~/.Xauthority; xauth -f ~/.Xauthority add :$DISPLAY . $(xxd -l 16 -p /dev/urandom); . #{CREW_PREFIX}/etc/sommelierrc\" &>>#{CREW_PREFIX}/var/log/sommelier.log
+  echo $! >#{CREW_PREFIX}/var/run/sommelier-xwayland.pid
 fi
 EOF"
       # startsommelier
