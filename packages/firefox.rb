@@ -27,40 +27,29 @@ class Firefox < Package
   source_url "http://ppa.launchpad.net/ubuntu-mozilla-security/ppa/ubuntu/pool/main/f/firefox/firefox_#{@_ver}_#{@_arch}.deb"
 
   depends_on 'atk'
-  depends_on 'cairo'
   depends_on 'dbus'
   depends_on 'dbus_glib'
-  depends_on 'fontconfig'
-  depends_on 'freetype'
-  depends_on 'gdk_pixbuf'
   depends_on 'glib'
   depends_on 'gtk2'
   depends_on 'gtk3'
-  depends_on 'libx11'
-  depends_on 'libxcb'
-  depends_on 'libxcomposite'
-  depends_on 'libxcursor'
-  depends_on 'libxdamage'
-  depends_on 'libxext'
-  depends_on 'libxfixes'
-  depends_on 'libxi'
-  depends_on 'libxrender'
-  depends_on 'libxt'
   depends_on 'pango'
   depends_on 'pulseaudio'
   depends_on 'sommelier'
 
-  def self.patch   
-    @_wrapper = <<~EOF
-      #!/bin/sh
-      # To get sound working, used : https://codelab.wordpress.com/2017/12/11/firefox-drops-alsa-apulse-to-the-rescue/
-      
-      exec apulse #{CREW_PREFIX}/lib/firefox/firefox "$@"
-    EOF
+  def self.patch
+    system('sed', '-i', "s:MOZ_LIBDIR=/usr/lib/firefox:MOZ_LIBDIR=#{CREW_PREFIX}/lib/firefox:", './usr/lib/firefox/firefox.sh')
     
-    FileUtils.rm('./usr/bin/firefox')
-    File.write('./usr/bin/firefox', @_wrapper)
-    File.chmod(0755, './usr/bin/firefox')
+    @_about = <<~EOF
+      [Global]
+      id=cros
+      version=1.0
+      about=Mozilla Firefox for Chrome OS, adapted from Ubuntu
+
+      [Preferences]
+      app.distributor="chromebrew"
+      app.distributor.channel="cros"
+    EOF
+    File.write('./usr/lib/firefox/distribution/distribution.ini', @_about)
   end
 
   def self.install
