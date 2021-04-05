@@ -26,13 +26,10 @@ class Firefox < Package
   
   source_url "http://ppa.launchpad.net/ubuntu-mozilla-security/ppa/ubuntu/pool/main/f/firefox/firefox_#{@_ver}_#{@_arch}.deb"
 
-  depends_on 'atk'
   depends_on 'dbus'
   depends_on 'dbus_glib'
-  depends_on 'glib'
   depends_on 'gtk2'
   depends_on 'gtk3'
-  depends_on 'pango'
   depends_on 'pulseaudio'
   depends_on 'sommelier'
 
